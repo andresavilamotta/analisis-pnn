@@ -1,7 +1,8 @@
 # backend/main.py
 import os
 import json
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -19,6 +20,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+@app.post("/api/login")
+def login(req: LoginRequest):
+    is_auditor = req.username == "Auditor1" and req.password == "VisitanteTigre"
+    is_admin = req.username == "Admin" and req.password == "Andres123"
+    
+    if is_auditor or is_admin:
+        return {"success": True, "token": "session-token-auditor1"}
+    raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
 
 # Dynamic path resolver using absolute paths relative to backend/main.py
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -42,8 +56,10 @@ def get_paths(entity: str):
         )
 
 @app.get("/api/contratos/{entity}")
-def get_contratos(entity: str):
+def get_contratos(entity: str, x_session_token: str = Header(None)):
     """Returns the list of contracts for the selected entity with their assigned dependency and risk scores."""
+    if x_session_token != "session-token-auditor1":
+        raise HTTPException(status_code=401, detail="No autorizado")
     data_path, risk_path = get_paths(entity)
     
     if not os.path.exists(data_path):
@@ -86,15 +102,17 @@ def get_contratos(entity: str):
 
 # Backward compatibility route for minambiente
 @app.get("/api/contratos/minambiente")
-def get_contratos_minambiente():
-    return get_contratos("minambiente")
+def get_contratos_minambiente(x_session_token: str = Header(None)):
+    return get_contratos("minambiente", x_session_token=x_session_token)
 
 @app.post("/api/auditoria-ia/{entity}/{id_contrato}")
-def get_auditoria_ia(entity: str, id_contrato: str):
+def get_auditoria_ia(entity: str, id_contrato: str, x_session_token: str = Header(None)):
     """
     Simulates a RAG Legal Auditor using Gemini to generate a tailored markdown audit report.
     It inspects the contract's specific flags, modality, contractor, and values.
     """
+    if x_session_token != "session-token-auditor1":
+        raise HTTPException(status_code=401, detail="No autorizado")
     data_path, risk_path = get_paths(entity)
     
     if not os.path.exists(data_path):

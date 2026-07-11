@@ -166,6 +166,43 @@ const inspectContract = (c, allContractsList) => {
 };
 
 export default function App() {
+    const [isAuthenticated, setIsAuthenticated] = useState(!!sessionStorage.getItem("authToken"));
+    const [username, setUsername] = useState("");
+    const [password, setPassword] = useState("");
+    const [loginError, setLoginError] = useState("");
+    const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+    const handleLogin = async (e) => {
+        e.preventDefault();
+        setLoginError("");
+        setIsLoggingIn(true);
+        try {
+            const res = await fetch("/api/login", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ username, password })
+            });
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.detail || "Error al iniciar sesión");
+            }
+            const data = await res.json();
+            sessionStorage.setItem("authToken", data.token);
+            setIsAuthenticated(true);
+        } catch (err) {
+            setLoginError(err.message);
+        } finally {
+            setIsLoggingIn(false);
+        }
+    };
+
+    const handleLogout = () => {
+        sessionStorage.removeItem("authToken");
+        setIsAuthenticated(false);
+    };
+
     const [entity, setEntity] = useState("pnn");
     const [allContracts, setAllContracts] = useState([]);
     const [filteredContracts, setFilteredContracts] = useState([]);
@@ -219,12 +256,21 @@ export default function App() {
 
     // Cargar datos
     useEffect(() => {
+        if (!isAuthenticated) return;
         async function fetchContracts() {
             setIsLoading(true);
             setErrorMessage("");
             try {
-                const response = await fetch(`/api/contratos/${entity}`);
+                const response = await fetch(`/api/contratos/${entity}`, {
+                    headers: {
+                        "X-Session-Token": sessionStorage.getItem("authToken") || ""
+                    }
+                });
                 if (!response.ok) {
+                    if (response.status === 401) {
+                        handleLogout();
+                        throw new Error("Sesión no autorizada o expirada.");
+                    }
                     throw new Error("No se pudo obtener la respuesta del servidor API.");
                 }
                 const data = await response.json();
@@ -246,7 +292,7 @@ export default function App() {
             }
         }
         fetchContracts();
-    }, [entity]);
+    }, [entity, isAuthenticated]);
 
     // Lucide icons
     useEffect(() => {
@@ -476,7 +522,12 @@ export default function App() {
         setAiAuditLoading(true);
         setAiAuditReport("");
         try {
-            const res = await fetch(`/api/auditoria-ia/${entity}/${id_contrato}`, { method: 'POST' });
+            const res = await fetch(`/api/auditoria-ia/${entity}/${id_contrato}`, {
+                method: 'POST',
+                headers: {
+                    "X-Session-Token": sessionStorage.getItem("authToken") || ""
+                }
+            });
             if (!res.ok) throw new Error("Error obteniendo la respuesta del servidor de IA.");
             const data = await res.json();
             setAiAuditReport(data.report_markdown || "No se generó dictamen.");
@@ -710,6 +761,92 @@ export default function App() {
         }).sort((a, b) => b.alerts - a.alerts);
     };
 
+    if (!isAuthenticated) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-[#0b0f19] px-4 font-inter text-slate-100">
+                <div className="w-full max-w-md p-8 rounded-3xl glass-card border border-white/10 shadow-2xl relative overflow-hidden space-y-6">
+                    {/* Decorative glowing gradient */}
+                    <div className="absolute -top-24 -left-24 w-48 h-48 bg-indigo-500/10 blur-[80px] rounded-full"></div>
+                    <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-purple-500/10 blur-[80px] rounded-full"></div>
+                    
+                    <div className="text-center space-y-2">
+                        <div className="inline-flex p-3.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-2xl mb-2">
+                            <svg className="w-8.5 h-8.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                            </svg>
+                        </div>
+                        <h2 className="text-xl font-bold font-outfit text-slate-100">Auditoría Contractual SODA</h2>
+                        <p className="text-xs text-slate-400">Ingresa tus credenciales para acceder al panel de control</p>
+                    </div>
+
+                    <form onSubmit={handleLogin} className="space-y-4">
+                        <div className="space-y-1.5">
+                            <label className="block text-xs font-semibold text-slate-300">Usuario</label>
+                            <div className="relative">
+                                <input 
+                                    type="text" 
+                                    value={username}
+                                    onChange={(e) => setUsername(e.target.value)}
+                                    placeholder="Ingresa tu usuario"
+                                    required
+                                    className="w-full p-3 pl-10 glass-input rounded-xl text-sm border border-white/10 bg-white/5 focus:border-indigo-500/50 outline-none transition"
+                                />
+                                <span className="absolute left-3.5 top-3.5 text-slate-400">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                    </svg>
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <label className="block text-xs font-semibold text-slate-300">Contraseña</label>
+                            <div className="relative">
+                                <input 
+                                    type="password" 
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    placeholder="Ingresa tu contraseña"
+                                    required
+                                    className="w-full p-3 pl-10 glass-input rounded-xl text-sm border border-white/10 bg-white/5 focus:border-indigo-500/50 outline-none transition"
+                                />
+                                <span className="absolute left-3.5 top-3.5 text-slate-400">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                                    </svg>
+                                </span>
+                            </div>
+                        </div>
+
+                        {loginError && (
+                            <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl flex items-center gap-2">
+                                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                </svg>
+                                <span>{loginError}</span>
+                            </div>
+                        )}
+
+                        <button 
+                            type="submit" 
+                            disabled={isLoggingIn}
+                            className="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold rounded-xl transition shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+                        >
+                            {isLoggingIn ? (
+                                <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                    <span>Verificando...</span>
+                                </>
+                            ) : (
+                                <span>Iniciar Sesión</span>
+                            )}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        );
+    }
+
     if (isLoading) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen">
@@ -762,9 +899,19 @@ export default function App() {
                         </select>
                     </div>
                 </div>
-                <div className="flex items-center gap-2 bg-emerald-500/10 text-emerald-400 px-3 py-1.5 rounded-full text-xs font-semibold">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 pulse"></span>
-                    API Sincronizada con SECOP II
+                <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 bg-emerald-500/10 text-emerald-400 px-3 py-1.5 rounded-full text-xs font-semibold">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 pulse"></span>
+                        API Sincronizada con SECOP II
+                    </div>
+                    
+                    <button 
+                        onClick={handleLogout}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded-xl text-xs font-bold font-outfit border border-red-500/10 transition"
+                    >
+                        <i data-lucide="log-out" className="w-4 h-4"></i>
+                        Cerrar Sesión
+                    </button>
                 </div>
             </header>
 
