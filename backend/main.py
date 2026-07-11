@@ -206,18 +206,22 @@ from fastapi.responses import HTMLResponse
 frontend_dir = os.path.join(os.path.dirname(BASE_DIR), "frontend")
 dist_dir = os.path.join(frontend_dir, "dist")
 
-if os.path.exists(dist_dir):
-    app.mount("/", StaticFiles(directory=dist_dir, html=True), name="frontend")
-else:
-    @app.get("/", response_class=HTMLResponse)
-    def read_root():
-        static_index = os.path.join(frontend_dir, "index.static.html")
-        if os.path.exists(static_index):
-            with open(static_index, "r", encoding="utf-8") as f:
-                return f.read()
-        raise HTTPException(status_code=404, detail="index.static.html no encontrado en frontend/")
-    
-    app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+# Only attempt to mount static files if the frontend folder exists (local execution).
+# On Vercel, the frontend folder is not present in the backend runtime container,
+# and Vercel itself handles static routing to the frontend.
+if os.path.exists(frontend_dir):
+    if os.path.exists(dist_dir):
+        app.mount("/", StaticFiles(directory=dist_dir, html=True), name="frontend")
+    else:
+        @app.get("/", response_class=HTMLResponse)
+        def read_root():
+            static_index = os.path.join(frontend_dir, "index.static.html")
+            if os.path.exists(static_index):
+                with open(static_index, "r", encoding="utf-8") as f:
+                    return f.read()
+            raise HTTPException(status_code=404, detail="index.static.html no encontrado en frontend/")
+        
+        app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
 
 if __name__ == "__main__":
     import uvicorn
