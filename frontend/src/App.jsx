@@ -165,6 +165,94 @@ const inspectContract = (c, allContractsList) => {
     return findings;
 };
 
+const getNormative = (flagText) => {
+    if (!flagText) return null;
+    const text = flagText.toLowerCase();
+    const normatives = [];
+
+    if (text.includes("cierre")) {
+        normatives.push({
+            rule: "Ley 80 de 1993, Artículo 60 (Liquidación)",
+            desc: "Los contratos de tracto sucesivo deben ser liquidados dentro de los plazos establecidos. La inacción por más de 4 meses constituye una omisión al deber de control de los saldos públicos."
+        });
+        normatives.push({
+            rule: "Ley 1474 de 2011, Artículo 84 (Supervisión)",
+            desc: "El supervisor es responsable civil y administrativamente por no adelantar oportunamente los trámites de liquidación correspondientes."
+        });
+    }
+    if (text.includes("electoral") || text.includes("garantías") || text.includes("garantias")) {
+        normatives.push({
+            rule: "Ley 996 de 2005, Artículo 33 (Ley de Garantías)",
+            desc: "Prohíbe expresamente la contratación directa durante los 4 meses anteriores a elecciones. Firmar contratos directos días antes de que inicie la restricción infringe los principios de moralidad administrativa y transparencia, pudiendo constituir desvío de poder."
+        });
+        normatives.push({
+            rule: "Código Disciplinario Único",
+            desc: "Califica la elusión de plazos electorales como falta grave."
+        });
+    }
+    if (text.includes("planeación") || text.includes("planeacion") || text.includes("concentración") || text.includes("concentracion")) {
+        normatives.push({
+            rule: "Ley 80 de 1993, Artículo 25 Numeral 3 (Principio de Planeación)",
+            desc: "Exige que los procesos correspondan a estudios precontractuales maduros y estén programados en el PAA. Concentrar adjudicaciones masivamente en un mes indica ejecución de saldos apresurada sin sustento técnico."
+        });
+    }
+    if (text.includes("modalidad") || text.includes("a dedo")) {
+        normatives.push({
+            rule: "Ley 1150 de 2007, Artículo 2 (Modalidades de Selección)",
+            desc: "La licitación pública es la regla obligatoria. Adjudicar directamente un contrato que excede el umbral de menor cuantía elude la libre concurrencia de oferentes, configurando una violación flagrante al régimen legal de contratación estatal."
+        });
+    }
+    if (text.includes("sobrecostos") || text.includes("adiciones") || text.includes("adición") || text.includes("adicion")) {
+        normatives.push({
+            rule: "Ley 80 de 1993, Artículo 40 (Modificación de Contratos)",
+            desc: "Prohíbe expresamente adicionar contratos en más del 50% de su valor inicial. Adiciones cercanas al 45% o que superan dicho límite son indicios de planeación deficiente en la estimación presupuestal del sector."
+        });
+    }
+    if (text.includes("fraccionamiento")) {
+        normatives.push({
+            rule: "Ley 80 de 1993, Artículo 24 (Principio de Transparencia)",
+            desc: "Prohíbe el fraccionamiento de contratos. Dividir artificialmente el objeto para otorgar múltiples contratos sucesivos de menor cuantía o directos en menos de 45 días elude los pliegos rigurosos de selección competitiva, constituyendo una conducta penalizable en la administración pública."
+        });
+    }
+    if (text.includes("anomalía") || text.includes("anomalia") || text.includes("prórrogas") || text.includes("prorrogas") || text.includes("tiempo sumado")) {
+        normatives.push({
+            rule: "Principio de Eficiencia y Programación Presupuestal",
+            desc: "Prórrogas de tiempo que duplican o superan el plazo inicial contratado demuestran fallas críticas en los estudios de factibilidad técnica y cronogramas precontractuales."
+        });
+    }
+    if (text.includes("pliego sastre") || text.includes("único") || text.includes("unico")) {
+        normatives.push({
+            rule: "Decreto 1082 de 2015 y Ley 1150 de 2007 (Pluralidad de Oferentes)",
+            desc: "El objetivo del pliego de condiciones es asegurar competencia. Que se presente un único proponente en licitación pública o concurso de méritos es sospecha de pliegos dirigidos o condiciones restrictivas ilegales."
+        });
+    }
+
+    return normatives.length > 0 ? normatives : null;
+};
+
+const getSecopUrl = (c) => {
+    if (!c) return "#";
+    
+    // 1. Prefer url_proceso from open data since it is 100% accurate Notice UID
+    if (c.url_proceso) {
+        let url = c.url_proceso;
+        if (!url.includes("isFromPublicArea")) {
+            url += url.includes("?") ? "&" : "?";
+            url += "isFromPublicArea=True&isModal=true&asPopupView=true";
+        }
+        return url;
+    }
+    
+    // 2. Fallback based on proceso_de_compra structure
+    const processId = c.proceso_de_compra || "";
+    if (processId.startsWith("CO1.BDOS.")) {
+        // Correct parameter for BDOS is docUniqueIdentifier, NOT noticeUID
+        return `https://community.secop.gov.co/Public/Tendering/OpportunityDetail/Index?docUniqueIdentifier=${processId}&isFromPublicArea=True&isModal=true&asPopupView=true`;
+    } else {
+        return `https://community.secop.gov.co/Public/Tendering/OpportunityDetail/Index?noticeUID=${processId}&isFromPublicArea=True&isModal=true&asPopupView=true`;
+    }
+};
+
 export default function App() {
     const [isAuthenticated, setIsAuthenticated] = useState(!!sessionStorage.getItem("authToken"));
     const [username, setUsername] = useState("");
@@ -299,7 +387,7 @@ export default function App() {
         if (window.lucide) {
             window.lucide.createIcons();
         }
-    }, [isLoading, filteredContracts, expandedCards, activeTimelineContractor, aiAuditReport]);
+    }, [isLoading, filteredContracts, expandedCards, activeTimelineContractor, aiAuditReport, currentPage, expandedRow, activeTab]);
 
     // Re-filtrar datos cuando cambian los filtros
     useEffect(() => {
@@ -880,23 +968,10 @@ export default function App() {
                         </div>
                         <div>
                             <h1 className="text-2xl font-outfit font-bold text-slate-100">
-                                {entity === "pnn" ? "Parques Nacionales Naturales" : "Ministerio de Ambiente"}
+                                Parques Nacionales Naturales (PNN)
                             </h1>
-                            <p className="text-xs text-indigo-400 font-medium">Clasificación de Contratos por Dependencia (SODA API)</p>
+                            <p className="text-xs text-indigo-400 font-medium">Auditoría de Contratos y Análisis de Riesgos (SODA API)</p>
                         </div>
-                    </div>
-                    
-                    {/* Selector de Entidad */}
-                    <div className="flex items-center gap-2 md:ml-6">
-                        <label className="text-xs font-semibold text-slate-400 font-outfit">Entidad:</label>
-                        <select 
-                            value={entity}
-                            onChange={(e) => setEntity(e.target.value)}
-                            className="p-2 glass-input rounded-xl text-xs font-bold font-outfit text-indigo-300"
-                        >
-                            <option value="pnn">Parques Nacionales Naturales (PNN)</option>
-                            <option value="minambiente">Ministerio de Ambiente</option>
-                        </select>
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -937,24 +1012,7 @@ export default function App() {
                 <>
                     {/* Filtros */}
                     <section className="glass-card p-6 rounded-2xl space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                            <div className="space-y-2">
-                                <label className="block text-xs font-semibold text-slate-300">Dependencia Responsable (Motor RegEx)</label>
-                                <select 
-                                    value={selectedDependency}
-                                    onChange={(e) => setSelectedDependency(e.target.value)}
-                                    className="w-full p-3 glass-input rounded-xl text-sm"
-                                >
-                                    <option value="">Todas las Dependencias ({allContracts.length} contratos)</option>
-                                    {dependencies.map(dep => {
-                                        const count = allContracts.filter(c => c.dependencia_identificada === dep).length;
-                                        return (
-                                            <option key={dep} value={dep}>{dep} ({count})</option>
-                                        );
-                                    })}
-                                </select>
-                            </div>
-
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                             <div className="space-y-2">
                                 <label className="block text-xs font-semibold text-slate-300">Modalidad de Contratación</label>
                                 <select 
@@ -1318,12 +1376,28 @@ export default function App() {
                                                 </h5>
                                                 {c.banderas_rojas && c.banderas_rojas.length > 0 ? (
                                                     <div className="space-y-2.5 text-[10.5px] leading-relaxed font-inter">
-                                                        {c.banderas_rojas.map((flag, idx) => (
-                                                            <div key={idx} className="flex items-start gap-1.5 border-b border-white/5 pb-1.5 last:border-b-0 last:pb-0">
-                                                                <span className="text-red-400 font-bold shrink-0">•</span>
-                                                                <p className="text-slate-300">{flag}</p>
-                                                            </div>
-                                                        ))}
+                                                        {c.banderas_rojas.map((flag, idx) => {
+                                                            const norms = getNormative(flag);
+                                                            return (
+                                                                <div key={idx} className="flex flex-col border-b border-white/5 pb-2.5 last:border-b-0 last:pb-0 gap-1.5">
+                                                                    <div className="flex items-start gap-1.5">
+                                                                        <span className="text-red-400 font-bold shrink-0">•</span>
+                                                                        <p className="text-slate-300">{flag}</p>
+                                                                    </div>
+                                                                    {norms && (
+                                                                        <div className="ml-3 mt-1 p-2 bg-black/25 rounded-lg border border-white/5 space-y-1">
+                                                                            <span className="text-[9px] font-bold text-indigo-400 font-outfit uppercase tracking-wider block">Sustento Normativo / Ley:</span>
+                                                                            {norms.map((n, nIdx) => (
+                                                                                <div key={nIdx} className="text-[10.5px] space-y-0.5">
+                                                                                    <strong className="text-slate-200 font-semibold block">{n.rule}</strong>
+                                                                                    <span className="text-slate-400 block">{n.desc}</span>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
                                                     </div>
                                                 ) : (
                                                     <p className="text-slate-400 text-[10px] font-mono">No se detectaron banderas rojas en el análisis de reglas.</p>
@@ -1357,9 +1431,9 @@ export default function App() {
                                                     </button>
                                                 )}
                                                 
-                                                {c.proceso_de_compra && (
+                                                {(c.proceso_de_compra || c.url_proceso) && (
                                                     <a 
-                                                        href={`https://community.secop.gov.co/Public/Tendering/OpportunityDetail/Index?noticeUID=${c.proceso_de_compra}`} 
+                                                        href={getSecopUrl(c)} 
                                                         target="_blank" 
                                                         rel="noopener noreferrer" 
                                                         className="p-1.5 bg-slate-800 hover:bg-slate-700 text-indigo-400 font-bold rounded-lg transition flex items-center justify-center"
@@ -1451,7 +1525,7 @@ export default function App() {
                                 Desglose de Riesgo y Alertas por Dependencia (Control Interno)
                             </h3>
                             <p className="text-xs text-slate-400 mt-1 font-inter">
-                                Porcentaje y volumen de alertas jurídicas identificadas en el total de contratos de cada dependencia del Ministerio de Ambiente (independiente del filtro activo).
+                                Porcentaje y volumen de alertas jurídicas identificadas en el total de contratos de cada dependencia de Parques Nacionales Naturales (PNN) (independiente del filtro activo).
                             </p>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1563,13 +1637,11 @@ export default function App() {
                                                                             <p className="text-slate-300 text-[11px] leading-relaxed"><strong className="text-slate-400 font-semibold">Objeto:</strong> {c.descripcion_del_proceso}</p>
                                                                             <div className="flex gap-2 text-[10px] text-slate-400 mt-1 font-mono items-center flex-wrap">
                                                                                 <span>ID: {c.id_contrato}</span>
-                                                                                <span>•</span>
-                                                                                <span>Mod: {c.modalidad_de_contratacion}</span>
-                                                                                {c.proceso_de_compra && (
+                                                                                {(c.proceso_de_compra || c.url_proceso) && (
                                                                                     <>
                                                                                         <span>•</span>
                                                                                         <a 
-                                                                                            href={`https://community.secop.gov.co/Public/Tendering/OpportunityDetail/Index?noticeUID=${c.proceso_de_compra}`} 
+                                                                                            href={getSecopUrl(c)} 
                                                                                             target="_blank" 
                                                                                             rel="noopener noreferrer" 
                                                                                             className="text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-0.5 transition"
@@ -1639,10 +1711,10 @@ export default function App() {
                                                             <span>Causal: Contratación Directa</span>
                                                             <span>NIT: {c.documento_proveedor || "N/A"}</span>
                                                             <span className="col-span-2">Proceso Compra: {c.proceso_de_compra || "N/A"}</span>
-                                                            {c.proceso_de_compra && (
+                                                            {(c.proceso_de_compra || c.url_proceso) && (
                                                                 <div className="col-span-2 pt-2 border-t border-white/5 flex justify-end">
                                                                     <a 
-                                                                        href={`https://community.secop.gov.co/Public/Tendering/OpportunityDetail/Index?noticeUID=${c.proceso_de_compra}`} 
+                                                                        href={getSecopUrl(c)} 
                                                                         target="_blank" 
                                                                         rel="noopener noreferrer" 
                                                                         className="px-2.5 py-1 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 font-bold rounded flex items-center gap-1 transition"

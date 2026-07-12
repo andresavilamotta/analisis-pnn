@@ -32,7 +32,7 @@ select_cols = (
     "fecha_de_inicio_del_contrato, fecha_de_fin_del_contrato, estado_contrato, "
     "dias_adicionados, objeto_del_contrato, duraci_n_del_contrato, "
     "nombre_entidad, nit_entidad, departamento, ciudad, valor_pagado, "
-    "valor_facturado, valor_pendiente_de_pago, valor_pendiente_de_ejecucion"
+    "valor_facturado, valor_pendiente_de_pago, valor_pendiente_de_ejecucion, urlproceso"
 )
 
 url = "https://www.datos.gov.co/resource/jbjy-vk9h.json"
@@ -97,6 +97,12 @@ try:
         # Convert to DataFrame
         df = pd.DataFrame.from_records(all_results)
         
+        # Extract process URL
+        if 'urlproceso' in df.columns:
+            df['url_proceso'] = df['urlproceso'].apply(lambda x: x.get('url') if isinstance(x, dict) else (x if isinstance(x, str) else None))
+        else:
+            df['url_proceso'] = None
+            
         # Map required columns for the audit engine
         if 'dias_adicionados' in df.columns:
             df['prorrogas_en_dias'] = pd.to_numeric(df['dias_adicionados'], errors='coerce').fillna(0)

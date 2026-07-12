@@ -7,8 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(
-    title="MinAmbiente Contratación API",
-    description="API para servir contratos etiquetados por dependencias del Ministerio de Ambiente",
+    title="PNN Contratación API",
+    description="API para servir contratos etiquetados por dependencias de Parques Nacionales Naturales (PNN)",
     version="1.0"
 )
 

@@ -49,7 +49,7 @@ try:
         "referencia_del_contrato, valor_del_contrato, modalidad_de_contratacion, "
         "fecha_de_firma, proveedor_adjudicado, documento_proveedor, "
         "fecha_de_inicio_del_contrato, fecha_de_fin_del_contrato, estado_contrato, "
-        "dias_adicionados"
+        "dias_adicionados, urlproceso"
     )
     
     print("Descargando registros desde la API SODA...")
@@ -75,6 +75,12 @@ try:
     # Convert to DataFrame
     df = pd.DataFrame.from_records(results)
     
+    # Extract process URL
+    if 'urlproceso' in df.columns:
+        df['url_proceso'] = df['urlproceso'].apply(lambda x: x.get('url') if isinstance(x, dict) else (x if isinstance(x, str) else None))
+    else:
+        df['url_proceso'] = None
+        
     # Map required columns for the audit engine
     if 'dias_adicionados' in df.columns:
         df['prorrogas_en_dias'] = pd.to_numeric(df['dias_adicionados'], errors='coerce').fillna(0)
